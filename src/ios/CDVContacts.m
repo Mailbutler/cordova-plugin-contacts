@@ -347,6 +347,8 @@
                 ];
 
                 CNContactFetchRequest* fetchRequest = [[CNContactFetchRequest alloc] initWithKeysToFetch:keysToFetch];
+                fetchRequest.mutableObjects = NO;
+                fetchRequest.unifyResults = YES;
                 NSError* error;
 
                 NSMutableArray* returnContacts = [NSMutableArray arrayWithCapacity:500];

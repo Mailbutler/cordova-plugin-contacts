@@ -876,10 +876,14 @@ static NSDictionary* org_apache_cordova_contacts_defaultFields = nil;
 
     NSMutableArray* emailFieldArray = [NSMutableArray arrayWithCapacity:self.contact.emailAddresses.count];
     for(CNLabeledValue<NSString*>* emailAddressValue in self.contact.emailAddresses) {
+        if(!(emailAddressValue.identifier && emailAddressValue.value)) {
+            continue;
+        }
+
         [emailFieldArray addObject:@{
             kW3ContactFieldId: emailAddressValue.identifier,
             kW3ContactFieldPrimary: @(NO), // not available on iOS
-            kW3ContactFieldType: emailAddressValue.label,
+            kW3ContactFieldType: emailAddressValue.label ?: kW3ContactOtherLabel,
             kW3ContactFieldValue: emailAddressValue.value
         }];
     }
