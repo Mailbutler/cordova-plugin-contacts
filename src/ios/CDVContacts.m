@@ -339,25 +339,26 @@
         CNContactStore* store = [[CNContactStore alloc] init];
         [store requestAccessForEntityType:CNEntityTypeContacts completionHandler:^(BOOL granted, NSError * _Nullable error) {
             if (granted == YES) {
-                NSArray* keysToFetch = @[CNContactNicknameKey,
-                                         [CNContactFormatter descriptorForRequiredKeysForStyle:CNContactFormatterStyleFullName],
-                                         CNContactEmailAddressesKey,
-                                         CNContactIdentifierKey];
-                ;
-                NSString* containerId = store.defaultContainerIdentifier; // TODO: fetch from other containers, too
-                NSPredicate* fetchPredicate = [CNContact predicateForContactsInContainerWithIdentifier:containerId];
+                NSArray* keysToFetch = @[
+                    [CNContactFormatter descriptorForRequiredKeysForStyle:CNContactFormatterStyleFullName],
+                    CNContactNicknameKey,
+                    CNContactEmailAddressesKey,
+                    CNContactIdentifierKey
+                ];
+
+                CNContactFetchRequest* fetchRequest = [[CNContactFetchRequest alloc] initWithKeysToFetch:keysToFetch];
                 NSError* error;
-                NSArray* cnContacts = [store unifiedContactsMatchingPredicate:fetchPredicate keysToFetch:keysToFetch error:&error];
+
+                NSMutableArray* returnContacts = [NSMutableArray arrayWithCapacity:500];
+                [store enumerateContactsWithFetchRequest:fetchRequest error:&error usingBlock:^(CNContact * _Nonnull contact, BOOL * _Nonnull stop) {
+                    CDVContact* jsContact = [[CDVContact alloc] initFromCNContact:contact];
+                    NSDictionary* dictContact = [jsContact toDictionary:returnFields];
+                    [returnContacts addObject:dictContact];
+                }];
+
                 if (error) {
                     NSLog(@"error fetching contacts %@", error);
                 } else {
-                    NSMutableArray* returnContacts = [NSMutableArray arrayWithCapacity:cnContacts.count];
-                    for (CNContact* contact in cnContacts) {
-                        CDVContact* jsContact = [[CDVContact alloc] initFromCNContact:contact];
-                        NSDictionary* dictContact = [jsContact toDictionary:returnFields];
-                        [returnContacts addObject:dictContact];
-                    }
-
                     CDVPluginResult* result = [CDVPluginResult resultWithStatus:CDVCommandStatus_OK messageAsArray:returnContacts];
                     [weakSelf.commandDelegate sendPluginResult:result callbackId:callbackId];
                 }
