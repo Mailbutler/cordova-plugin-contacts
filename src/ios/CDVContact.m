@@ -30,7 +30,8 @@ static NSDictionary* org_apache_cordova_contacts_defaultFields = nil;
 
 @implementation CDVContact : NSObject
 
-                             @synthesize returnFields;
+@synthesize returnFields;
+@synthesize contact;
 
 - (id)init
 {
@@ -48,6 +49,14 @@ static NSDictionary* org_apache_cordova_contacts_defaultFields = nil;
 {
     if ((self = [super init]) != nil) {
         self.record = aRecord;
+    }
+    return self;
+}
+
+- (id)initFromCNContact:(CNContact*)cnContact
+{
+    if ((self = [super init]) != nil) {
+        self.contact = cnContact;
     }
     return self;
 }
@@ -848,8 +857,43 @@ static NSDictionary* org_apache_cordova_contacts_defaultFields = nil;
  * @param {DOMString} connected
  */
 
+- (NSDictionary*)contactToDictionary {
+    NSMutableDictionary* nc = [NSMutableDictionary dictionaryWithCapacity:1];
+
+    nc[kW3ContactId] = self.contact.identifier;
+
+    CNContactFormatter* cf = [[CNContactFormatter alloc] init];
+    NSMutableDictionary* nameDict = [NSMutableDictionary dictionaryWithCapacity:4];
+    nameDict[kW3ContactFormattedName] = [cf stringFromContact:self.contact];
+    nameDict[kW3ContactFamilyName] = self.contact.familyName ?: [NSNull null];
+    nameDict[kW3ContactGivenName] = self.contact.givenName ?: [NSNull null];
+    nameDict[kW3ContactMiddleName] = self.contact.middleName ?: [NSNull null];
+    nameDict[kW3ContactHonorificPrefix] = self.contact.namePrefix ?: [NSNull null];
+    nameDict[kW3ContactHonorificSuffix] = self.contact.nameSuffix ?: [NSNull null];
+
+    nc[kW3ContactName] = nameDict;
+    nc[kW3ContactNickname] = contact.nickname ?: [NSNull null];
+
+    NSMutableArray* emailFieldArray = [NSMutableArray arrayWithCapacity:self.contact.emailAddresses.count];
+    for(CNLabeledValue<NSString*>* emailAddressValue in self.contact.emailAddresses) {
+        [emailFieldArray addObject:@{
+            kW3ContactFieldId: emailAddressValue.identifier,
+            kW3ContactFieldPrimary: @(NO), // not available on iOS
+            kW3ContactFieldType: emailAddressValue.label,
+            kW3ContactFieldValue: emailAddressValue.value
+        }];
+    }
+    nc[kW3ContactEmails] = emailFieldArray;
+
+    return nc;
+}
+
 - (NSDictionary*)toDictionary:(NSDictionary*)withFields
 {
+    if(self.contact) {
+        return [self contactToDictionary];
+    }
+
     // if not a person type record bail out for now
     if (ABRecordGetRecordType(self.record) != kABPersonType) {
         return NULL;

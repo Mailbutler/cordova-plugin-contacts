@@ -19,6 +19,7 @@
 
 #import "CDVContacts.h"
 #import <UIKit/UIKit.h>
+#import <Contacts/Contacts.h>
 
 @implementation CDVContactsPicker
 
@@ -89,11 +90,11 @@
 {
     id val = [dict valueForKey:key];
     bool exists = false;
-
+    
     if (val != nil) {
         exists = [(NSString*)val compare : expectedValue options : NSCaseInsensitiveSearch] == 0;
     }
-
+    
     return exists;
 }
 
@@ -182,12 +183,12 @@
         desiredFields = [NSArray arrayWithObjects:@"*", nil];
     }
     NSMutableDictionary* options = [NSMutableDictionary dictionaryWithCapacity:2];
-
+    
     [options setObject: desiredFields forKey:@"fields"];
     [options setObject: [NSNumber numberWithBool: FALSE] forKey:@"allowsEditing"];
-
+    
     NSArray* args = [NSArray arrayWithObjects:options, nil];
-
+    
     CDVInvokedUrlCommand* newCommand = [[CDVInvokedUrlCommand alloc] initWithArguments:args
                  callbackId:command.callbackId
                   className:command.className
@@ -252,9 +253,9 @@
         }
         CFRelease(addrBook);
     }
-
+    
     NSNumber* recordId = picker.pickedContactDictionary[kW3ContactId];
-
+    
     [[peoplePicker presentingViewController] dismissViewControllerAnimated:YES completion:^{
         CDVPluginResult* result = nil;
         if ([recordId isEqualToNumber:[NSNumber numberWithInt:kABRecordInvalidID]]) {
@@ -271,7 +272,7 @@
 {
     CDVContactsPicker* picker = (CDVContactsPicker*)peoplePicker;
     NSNumber* pickedId = [NSNumber numberWithInt:ABRecordGetRecordID(person)];
-
+    
     if (picker.allowsEditing) {
         ABPersonViewController* personController = [[ABPersonViewController alloc] init];
         personController.displayedPerson = person;
@@ -279,7 +280,7 @@
         personController.allowsEditing = picker.allowsEditing;
         // store id so can get info in peoplePickerNavigationControllerDidCancel
         picker.pickedContactDictionary = [NSDictionary dictionaryWithObjectsAndKeys:pickedId, kW3ContactId, nil];
-
+        
         [peoplePicker pushViewController:personController animated:YES];
     } else {
         // Retrieve and return pickedContact information
@@ -287,7 +288,7 @@
         NSArray* fields = [picker.options objectForKey:@"fields"];
         NSDictionary* returnFields = [[CDVContact class] calcReturnFields:fields];
         picker.pickedContactDictionary = [pickedContact toDictionary:returnFields];
-
+        
         [[picker presentingViewController] dismissViewControllerAnimated:YES completion:^{
             CDVPluginResult* result = [CDVPluginResult resultWithStatus:CDVCommandStatus_OK messageAsDictionary:picker.pickedContactDictionary];
             [self.commandDelegate sendPluginResult:result callbackId:picker.callbackId];
@@ -308,106 +309,61 @@
     NSDictionary* findOptions = [command argumentAtIndex:1 withDefault:[NSNull null]];
 
     [self.commandDelegate runInBackground:^{
-        // from Apple:  Important You must ensure that an instance of ABAddressBookRef is used by only one thread.
-        // which is why address book is created within the dispatch queue.
-        // more details here: http: //blog.byadrian.net/2012/05/05/ios-addressbook-framework-and-gcd/
-        CDVAddressBookHelper* abHelper = [[CDVAddressBookHelper alloc] init];
-        CDVContacts* __weak weakSelf = self;     // play it safe to avoid retain cycles
-        // it gets uglier, block within block.....
-        [abHelper createAddressBook: ^(ABAddressBookRef addrBook, CDVAddressBookAccessError* errCode) {
-            if (addrBook == NULL) {
-                // permission was denied or other error - return error
-                CDVPluginResult* result = [CDVPluginResult resultWithStatus:CDVCommandStatus_ERROR messageToErrorObject:errCode ? (int)errCode.errorCode:UNKNOWN_ERROR];
-                [weakSelf.commandDelegate sendPluginResult:result callbackId:callbackId];
-                return;
+        // get the findOptions values
+        BOOL multiple = NO;         // default is false
+        NSString* filter = nil;
+        NSArray* desiredFields = nil;
+        if (![findOptions isKindOfClass:[NSNull class]]) {
+            id value = nil;
+            id filterValue = [findOptions objectForKey:@"filter"];
+            BOOL filterValueIsNumber = [filterValue isKindOfClass:[NSNumber class]];
+            filter = filterValueIsNumber ? [filterValue stringValue] : (NSString *) filterValue;
+            value = [findOptions objectForKey:@"multiple"];
+            if ([value isKindOfClass:[NSNumber class]]) {
+                // multiple is a boolean that will come through as an NSNumber
+                multiple = [(NSNumber*)value boolValue];
+                // NSLog(@"multiple is: %d", multiple);
             }
-
-            NSArray* foundRecords = nil;
-            // get the findOptions values
-            BOOL multiple = NO;         // default is false
-            NSString* filter = nil;
-            NSArray* desiredFields = nil;
-            if (![findOptions isKindOfClass:[NSNull class]]) {
-                id value = nil;
-                id filterValue = [findOptions objectForKey:@"filter"];
-                BOOL filterValueIsNumber = [filterValue isKindOfClass:[NSNumber class]];
-                filter = filterValueIsNumber ? [filterValue stringValue] : (NSString *) filterValue;
-                value = [findOptions objectForKey:@"multiple"];
-                if ([value isKindOfClass:[NSNumber class]]) {
-                    // multiple is a boolean that will come through as an NSNumber
-                    multiple = [(NSNumber*)value boolValue];
-                    // NSLog(@"multiple is: %d", multiple);
-                }
-                desiredFields = [findOptions objectForKey:@"desiredFields"];
-                // return all fields if desired fields are not explicitly defined
-                if (desiredFields == nil || desiredFields.count == 0) {
-                    desiredFields = [NSArray arrayWithObjects:@"*", nil];
-                }
+            desiredFields = [findOptions objectForKey:@"desiredFields"];
+            // return all fields if desired fields are not explicitly defined
+            if (desiredFields == nil || desiredFields.count == 0) {
+                desiredFields = [NSArray arrayWithObjects:@"*", nil];
             }
+        }
 
-            NSDictionary* searchFields = [[CDVContact class] calcReturnFields:fields];
-            NSDictionary* returnFields = [[CDVContact class] calcReturnFields:desiredFields];
+        NSDictionary* searchFields = [[CDVContact class] calcReturnFields:fields];
+        NSDictionary* returnFields = [[CDVContact class] calcReturnFields:desiredFields];
 
-            NSMutableArray* matches = nil;
-            if (!filter || [filter isEqualToString:@""]) {
-                // get all records
-                foundRecords = (__bridge_transfer NSArray*)ABAddressBookCopyArrayOfAllPeople(addrBook);
-                if (foundRecords && ([foundRecords count] > 0)) {
-                    // create Contacts and put into matches array
-                    // doesn't make sense to ask for all records when multiple == NO but better check
-                    int xferCount = multiple == YES ? (int)[foundRecords count] : 1;
-                    matches = [NSMutableArray arrayWithCapacity:xferCount];
+        CDVContacts* __weak weakSelf = self;
 
-                    for (int k = 0; k < xferCount; k++) {
-                        CDVContact* xferContact = [[CDVContact alloc] initFromABRecord:(__bridge ABRecordRef)[foundRecords objectAtIndex:k]];
-                        [matches addObject:xferContact];
-                        xferContact = nil;
+        CNContactStore* store = [[CNContactStore alloc] init];
+        [store requestAccessForEntityType:CNEntityTypeContacts completionHandler:^(BOOL granted, NSError * _Nullable error) {
+            if (granted == YES) {
+                NSArray* keysToFetch = @[CNContactNicknameKey,
+                                         [CNContactFormatter descriptorForRequiredKeysForStyle:CNContactFormatterStyleFullName],
+                                         CNContactEmailAddressesKey,
+                                         CNContactIdentifierKey];
+                ;
+                NSString* containerId = store.defaultContainerIdentifier; // TODO: fetch from other containers, too
+                NSPredicate* fetchPredicate = [CNContact predicateForContactsInContainerWithIdentifier:containerId];
+                NSError* error;
+                NSArray* cnContacts = [store unifiedContactsMatchingPredicate:fetchPredicate keysToFetch:keysToFetch error:&error];
+                if (error) {
+                    NSLog(@"error fetching contacts %@", error);
+                } else {
+                    NSMutableArray* returnContacts = [NSMutableArray arrayWithCapacity:cnContacts.count];
+                    for (CNContact* contact in cnContacts) {
+                        CDVContact* jsContact = [[CDVContact alloc] initFromCNContact:contact];
+                        NSDictionary* dictContact = [jsContact toDictionary:returnFields];
+                        [returnContacts addObject:dictContact];
                     }
+
+                    CDVPluginResult* result = [CDVPluginResult resultWithStatus:CDVCommandStatus_OK messageAsArray:returnContacts];
+                    [weakSelf.commandDelegate sendPluginResult:result callbackId:callbackId];
                 }
-            } else {
-                foundRecords = (__bridge_transfer NSArray*)ABAddressBookCopyArrayOfAllPeople(addrBook);
-                matches = [NSMutableArray arrayWithCapacity:1];
-                BOOL bFound = NO;
-                int testCount = (int)[foundRecords count];
-
-                for (int j = 0; j < testCount; j++) {
-                    CDVContact* testContact = [[CDVContact alloc] initFromABRecord:(__bridge ABRecordRef)[foundRecords objectAtIndex:j]];
-                    if (testContact) {
-                        bFound = [testContact foundValue:filter inFields:searchFields];
-                        if (bFound) {
-                            [matches addObject:testContact];
-                        }
-                        testContact = nil;
-                    }
-                }
-            }
-            NSMutableArray* returnContacts = [NSMutableArray arrayWithCapacity:1];
-
-            if ((matches != nil) && ([matches count] > 0)) {
-                // convert to JS Contacts format and return in callback
-                // - returnFields  determines what properties to return
-                @autoreleasepool {
-                    int count = multiple == YES ? (int)[matches count] : 1;
-
-                    for (int i = 0; i < count; i++) {
-                        CDVContact* newContact = [matches objectAtIndex:i];
-                        NSDictionary* aContact = [newContact toDictionary:returnFields];
-                        [returnContacts addObject:aContact];
-                    }
-                }
-            }
-            // return found contacts (array is empty if no contacts found)
-            CDVPluginResult* result = [CDVPluginResult resultWithStatus:CDVCommandStatus_OK messageAsArray:returnContacts];
-            [weakSelf.commandDelegate sendPluginResult:result callbackId:callbackId];
-            // NSLog(@"findCallback string: %@", jsString);
-
-            if (addrBook) {
-                CFRelease(addrBook);
             }
         }];
-    }];     // end of workQueue block
-
-    return;
+    }];
 }
 
 - (void)save:(CDVInvokedUrlCommand*)command
@@ -597,14 +553,15 @@
     // NSLog(@"addressBook access: %lu", status);
     ABAddressBookRequestAccessWithCompletion(addressBook, ^(bool granted, CFErrorRef error) {
             // callback can occur in background, address book must be accessed on thread it was created on
-            if (error) {
-                workerBlock(NULL, [[CDVAddressBookAccessError alloc] initWithCode:UNKNOWN_ERROR]);
-            } else if (!granted) {
-                workerBlock(NULL, [[CDVAddressBookAccessError alloc] initWithCode:PERMISSION_DENIED_ERROR]);
-            } else {
-                // access granted
-                workerBlock(addressBook, [[CDVAddressBookAccessError alloc] initWithCode:UNKNOWN_ERROR]);
-            }
+
+                if (error) {
+                    workerBlock(NULL, [[CDVAddressBookAccessError alloc] initWithCode:UNKNOWN_ERROR]);
+                } else if (!granted) {
+                    workerBlock(NULL, [[CDVAddressBookAccessError alloc] initWithCode:PERMISSION_DENIED_ERROR]);
+                } else {
+                    // access granted
+                    workerBlock(addressBook, [[CDVAddressBookAccessError alloc] initWithCode:UNKNOWN_ERROR]);
+                }
         });
 }
 

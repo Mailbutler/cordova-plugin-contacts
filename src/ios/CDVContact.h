@@ -20,6 +20,7 @@
 #import <Foundation/Foundation.h>
 #import <AddressBook/ABAddressBook.h>
 #import <AddressBookUI/AddressBookUI.h>
+#import <Contacts/Contacts.h>
 
 enum CDVContactError {
     UNKNOWN_ERROR = 0,
@@ -35,11 +36,13 @@ typedef NSUInteger CDVContactError;
 
 @interface CDVContact : NSObject {
     ABRecordRef record;         // the ABRecord associated with this contact
+    CNContact* contact;
     NSDictionary* returnFields; // dictionary of fields to return when performing search
 }
 
 @property (nonatomic, assign) ABRecordRef record;
 @property (nonatomic, strong) NSDictionary* returnFields;
+@property (nonatomic, strong) CNContact* contact;
 
 + (NSDictionary*)defaultABtoW3C;
 + (NSDictionary*)defaultW3CtoAB;
@@ -50,6 +53,7 @@ typedef NSUInteger CDVContactError;
 + (NSDictionary*)calcReturnFields:(NSArray*)fields;
 - (id)init;
 - (id)initFromABRecord:(ABRecordRef)aRecord;
+- (id)initFromCNContact:(CNContact*)cnContact;
 - (bool)setFromContactDict:(NSDictionary*)aContact asUpdate:(BOOL)bUpdate;
 
 + (BOOL)needsConversion:(NSString*)W3Label;
