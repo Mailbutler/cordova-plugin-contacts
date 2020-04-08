@@ -874,20 +874,77 @@ static NSDictionary* org_apache_cordova_contacts_defaultFields = nil;
     nc[kW3ContactName] = nameDict;
     nc[kW3ContactNickname] = contact.nickname ?: [NSNull null];
 
+    if(self.contact.birthday) {
+        NSDateFormatter* formatter = [[NSDateFormatter alloc] init];
+        [formatter setDateFormat:@"yyyy-MM-dd"];
+
+        nc[kW3ContactBirthday] = [formatter stringFromDate:self.contact.birthday.date];
+    }
+
     NSMutableArray* emailFieldArray = [NSMutableArray arrayWithCapacity:self.contact.emailAddresses.count];
     for(CNLabeledValue<NSString*>* emailAddressValue in self.contact.emailAddresses) {
-        if(!(emailAddressValue.identifier && emailAddressValue.value)) {
+        if(!emailAddressValue.value) {
             continue;
         }
 
         [emailFieldArray addObject:@{
-            kW3ContactFieldId: emailAddressValue.identifier,
+            kW3ContactFieldId: emailAddressValue.identifier ?: [NSNull null],
             kW3ContactFieldPrimary: @(NO), // not available on iOS
             kW3ContactFieldType: emailAddressValue.label ?: kW3ContactOtherLabel,
             kW3ContactFieldValue: emailAddressValue.value
         }];
     }
     nc[kW3ContactEmails] = emailFieldArray;
+
+    NSMutableArray* phoneFieldArray = [NSMutableArray arrayWithCapacity:self.contact.phoneNumbers.count];
+    for(CNLabeledValue<CNPhoneNumber*>* phoneValue in self.contact.phoneNumbers) {
+        if(!phoneValue.value) {
+            continue;
+        }
+
+        [phoneFieldArray addObject:@{
+            kW3ContactFieldId: phoneValue.identifier ?: [NSNull null],
+            kW3ContactFieldPrimary: @(NO), // not available on iOS
+            kW3ContactFieldType: phoneValue.label ?: kW3ContactOtherLabel,
+            kW3ContactFieldValue: phoneValue.value.stringValue
+        }];
+    }
+    nc[kW3ContactPhoneNumbers] = phoneFieldArray;
+
+    NSMutableArray* addressFieldArray = [NSMutableArray arrayWithCapacity:self.contact.postalAddresses.count];
+    for(CNLabeledValue<CNPostalAddress*>* addressValue in self.contact.postalAddresses) {
+        if(!addressValue.value) {
+            continue;
+        }
+
+        CNPostalAddress* address = addressValue.value;
+
+        [addressFieldArray addObject:@{
+            kW3ContactFieldId: addressValue.identifier ?: [NSNull null],
+            kW3ContactFieldPrimary: @(NO), // not available on iOS
+            kW3ContactFieldType: addressValue.label ?: kW3ContactOtherLabel,
+            kW3ContactFieldValue: @{
+                    kW3ContactStreetAddress: address.street ?: [NSNull null],
+                    kW3ContactRegion: address.subAdministrativeArea ?: [NSNull null],
+                    kW3ContactPostalCode: address.postalCode ?: [NSNull null],
+                    kW3ContactLocality: address.city ?: [NSNull null],
+                    kW3ContactCountry: address.country ?: [NSNull null],
+            }
+        }];
+    }
+    nc[kW3ContactAddresses] = addressFieldArray;
+
+    NSMutableArray* organizationFieldArray = [NSMutableArray arrayWithCapacity:1];
+    if(self.contact.organizationName) {
+        [organizationFieldArray addObject:@{
+            kW3ContactFieldPrimary: @(NO), // not available on iOS
+            kW3ContactFieldType: kW3ContactOtherLabel,
+            kW3ContactOrganizationName: self.contact.organizationName,
+            kW3ContactDepartment: self.contact.departmentName ?: [NSNull null],
+            kW3ContactTitle:self.contact.jobTitle ?: [NSNull null],
+        }];
+    }
+    nc[kW3ContactOrganizations] = organizationFieldArray;
 
     return nc;
 }

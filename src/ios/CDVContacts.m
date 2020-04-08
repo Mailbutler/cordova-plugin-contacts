@@ -343,7 +343,13 @@
                     [CNContactFormatter descriptorForRequiredKeysForStyle:CNContactFormatterStyleFullName],
                     CNContactNicknameKey,
                     CNContactEmailAddressesKey,
-                    CNContactIdentifierKey
+                    CNContactIdentifierKey,
+                    CNContactBirthdayKey,
+                    CNContactPhoneNumbersKey,
+                    CNContactPostalAddressesKey,
+                    CNContactOrganizationNameKey,
+                    CNContactDepartmentNameKey,
+                    CNContactJobTitleKey
                 ];
 
                 CNContactFetchRequest* fetchRequest = [[CNContactFetchRequest alloc] initWithKeysToFetch:keysToFetch];
